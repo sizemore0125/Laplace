@@ -19,11 +19,15 @@ from torch.utils.data import DataLoader
 
 from laplace import Laplace
 from laplace.baselaplace import BaseLaplace
-from laplace.curvature import AsdlGGN
+from laplace.curvature import CurvlinopsGGN
 from laplace.curvature.curvature import CurvatureInterface
+from laplace.likelihood import (
+    ClassificationLikelihood,
+    Likelihood as LikelihoodModule,
+    RegressionLikelihood,
+)
 from laplace.utils import (
     HessianStructure,
-    Likelihood,
     PriorStructure,
     SubsetOfWeights,
     expand_prior_precision,
@@ -34,9 +38,9 @@ from laplace.utils import (
 def marglik_training(
     model: torch.nn.Module,
     train_loader: DataLoader,
-    likelihood: Likelihood | str = Likelihood.CLASSIFICATION,
+    likelihood: LikelihoodModule | str = ClassificationLikelihood(),
     hessian_structure: HessianStructure | str = HessianStructure.KRON,
-    backend: Type[CurvatureInterface] = AsdlGGN,
+    backend: Type[CurvatureInterface] = CurvlinopsGGN,
     optimizer_cls: Type[Optimizer] = Adam,
     optimizer_kwargs: dict | None = None,
     scheduler_cls: Type[LRScheduler] | None = None,
@@ -96,8 +100,8 @@ def marglik_training(
         Likelihood.CLASSIFICATION or Likelihood.REGRESSION
     hessian_structure : {'diag', 'kron', 'full'}, default='kron'
         structure of the Hessian approximation
-    backend : Backend, default=AsdlGGN
-        Curvature subclass, e.g. AsdlGGN/AsdlEF or BackPackGGN/BackPackEF
+    backend : Backend, default=CurvlinopsGGN
+        Curvature subclass.
     optimizer_cls : torch.optim.Optimizer, default=Adam
         optimizer to use for optimizing the neural network parameters togeth with `train_loader`
     optimizer_kwargs : dict, default=None
@@ -158,6 +162,19 @@ def marglik_training(
         warnings.warn("Weight decay is handled and optimized. Will be set to 0.")
         optimizer_kwargs["weight_decay"] = 0.0
 
+    # normalize likelihood to object
+    if isinstance(likelihood, LikelihoodModule):
+        likelihood_obj = likelihood
+    elif isinstance(likelihood, str):
+        if likelihood.lower() == "regression":
+            likelihood_obj = RegressionLikelihood()
+        elif likelihood.lower() == "classification":
+            likelihood_obj = ClassificationLikelihood()
+        else:
+            raise ValueError(f"Unsupported likelihood specifier {likelihood}")
+    else:
+        raise ValueError(f"Unsupported likelihood type {type(likelihood)}")
+
     # get device, data set size N, number of layers H, number of parameters P
     p = next(model.parameters())
     device, dtype = p.device, p.dtype
@@ -177,10 +194,10 @@ def marglik_training(
     hyperparameters.append(log_prior_prec)
 
     # set up loss (and observation noise hyperparam)
-    if likelihood == Likelihood.CLASSIFICATION:
+    if likelihood_obj.is_classification_like():
         criterion = CrossEntropyLoss(reduction="mean")
         sigma_noise = 1.0
-    elif likelihood == Likelihood.REGRESSION:
+    elif likelihood_obj.is_regression_like():
         criterion = MSELoss(reduction="mean")
         log_sigma_noise_init = np.log(sigma_noise_init)
         log_sigma_noise = log_sigma_noise_init * torch.ones(
@@ -235,7 +252,7 @@ def marglik_training(
 
             optimizer.zero_grad()
 
-            if likelihood == Likelihood.REGRESSION:
+            if likelihood_obj.is_regression_like():
                 sigma_noise = (
                     torch.exp(log_sigma_noise).detach()
                     if not fix_sigma_noise
@@ -257,7 +274,7 @@ def marglik_training(
             optimizer.step()
             epoch_loss += loss.cpu().item() * len(y)
 
-            if likelihood == Likelihood.REGRESSION:
+            if likelihood_obj.is_regression_like():
                 epoch_perf += (f.detach() - y).square().sum()
             else:
                 epoch_perf += torch.sum(torch.argmax(f.detach(), dim=-1) == y).item()
@@ -279,16 +296,15 @@ def marglik_training(
 
         # optimizer hyperparameters by differentiating marglik
         # 1. fit laplace approximation
-        if likelihood == Likelihood.CLASSIFICATION:
-            sigma_noise = 1
-        else:
-            sigma_noise = (
-                torch.exp(log_sigma_noise) if not fix_sigma_noise else sigma_noise_init
-            )
+        sigma_noise = (
+            1
+            if likelihood_obj.is_classification_like()
+            else (torch.exp(log_sigma_noise) if not fix_sigma_noise else sigma_noise_init)
+        )
         prior_prec = torch.exp(log_prior_prec)
         lap = Laplace(
             model,
-            likelihood,
+            likelihood_obj,
             hessian_structure=hessian_structure,
             sigma_noise=sigma_noise,
             prior_precision=prior_prec,
@@ -303,7 +319,7 @@ def marglik_training(
         # 2. differentiate wrt. hyperparameters for n_hypersteps
         for _ in range(n_hypersteps):
             hyper_optimizer.zero_grad()
-            if likelihood == Likelihood.CLASSIFICATION or fix_sigma_noise:
+            if likelihood_obj.is_classification_like() or fix_sigma_noise:
                 sigma_noise = None
             else:
                 sigma_noise = torch.exp(log_sigma_noise)
@@ -317,14 +333,15 @@ def marglik_training(
         if margliks[-1] < best_marglik:
             best_model_dict = deepcopy(model.state_dict())
             best_precision = deepcopy(prior_prec.detach())
-            if likelihood == Likelihood.CLASSIFICATION:
-                best_sigma = 1
-            else:
-                best_sigma = (
+            best_sigma = (
+                1
+                if likelihood_obj.is_classification_like()
+                else (
                     deepcopy(sigma_noise.detach())
                     if not fix_sigma_noise
                     else sigma_noise_init
                 )
+            )
             best_marglik = margliks[-1]
             logging.info(
                 f"MARGLIK[epoch={epoch}]: marglik optimization. MargLik={best_marglik:.2f}. "
@@ -346,7 +363,7 @@ def marglik_training(
 
     lap = Laplace(
         model,
-        likelihood,
+        likelihood_obj,
         hessian_structure=hessian_structure,
         sigma_noise=sigma_noise,
         prior_precision=prior_prec,

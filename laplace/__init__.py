@@ -11,19 +11,11 @@ from laplace.baselaplace import (
     BaseLaplace,
     DiagLaplace,
     FullLaplace,
-    FunctionalLaplace,
     KronLaplace,
-    LowRankLaplace,
     ParametricLaplace,
 )
 from laplace.laplace import Laplace
-from laplace.lllaplace import (
-    DiagLLLaplace,
-    FullLLLaplace,
-    FunctionalLLLaplace,
-    KronLLLaplace,
-    LLLaplace,
-)
+from laplace.lllaplace import DiagLLLaplace, FullLLLaplace, KronLLLaplace, LLLaplace
 from laplace.marglik_training import marglik_training
 from laplace.subnetlaplace import DiagSubnetLaplace, FullSubnetLaplace, SubnetLaplace
 from laplace.utils.enums import (
@@ -43,13 +35,10 @@ __all__ = [
     "FullLaplace",
     "KronLaplace",
     "DiagLaplace",
-    "FunctionalLaplace",
-    "LowRankLaplace",  # all-weights
     "LLLaplace",  # base-class last-layer
     "FullLLLaplace",
     "KronLLLaplace",
     "DiagLLLaplace",
-    "FunctionalLLLaplace",  # last-layer
     "SubnetLaplace",  # base-class subnetwork
     "FullSubnetLaplace",
     "DiagSubnetLaplace",  # subnetwork

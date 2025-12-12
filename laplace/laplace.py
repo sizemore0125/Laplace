@@ -14,7 +14,7 @@ def Laplace(
     model: torch.nn.Module,
     likelihood: Likelihood | str,
     subset_of_weights: SubsetOfWeights | str = SubsetOfWeights.LAST_LAYER,
-    hessian_structure: HessianStructure | str = HessianStructure.KRON,
+    hessian_structure: HessianStructure | str = HessianStructure.FULL,
     *args,
     **kwargs,
 ) -> BaseLaplace:
@@ -34,6 +34,9 @@ def Laplace(
     laplace : BaseLaplace
         chosen subclass of BaseLaplace instantiated with additional arguments
     """
+    if hessian_structure == "kron" or hessian_structure == HessianStructure.KRON:
+        raise ValueError("Kronecker Hessian structure is no longer supported.")
+
     if subset_of_weights == "subnetwork" and hessian_structure not in ["full", "diag"]:
         raise ValueError(
             "Subnetwork Laplace requires a full or diagonal Hessian approximation!"

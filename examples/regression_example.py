@@ -4,7 +4,7 @@ from helper.dataloaders import get_sinusoid_example
 from helper.util import plot_regression
 
 from laplace import Laplace, marglik_training
-from laplace.curvature.backpack import BackPackGGN
+from laplace.likelihood import RegressionLikelihood
 
 n_epochs = 1000
 torch.manual_seed(711)
@@ -22,6 +22,7 @@ def get_model():
 
 
 model = get_model()
+likelihood = RegressionLikelihood()
 
 # train MAP
 criterion = torch.nn.MSELoss()
@@ -33,7 +34,7 @@ for i in range(n_epochs):
         loss.backward()
         optimizer.step()
 
-la = Laplace(model, "regression", subset_of_weights="all", hessian_structure="full")
+la = Laplace(model, likelihood, subset_of_weights="all", hessian_structure="full")
 la.fit(train_loader)
 log_prior, log_sigma = (
     torch.ones(1, requires_grad=True),
@@ -50,7 +51,7 @@ for i in range(n_epochs):
 state_dict = la.state_dict()
 torch.save(state_dict, "state_dict.bin")
 
-la = Laplace(model, "regression", subset_of_weights="all", hessian_structure="full")
+la = Laplace(model, likelihood, subset_of_weights="all", hessian_structure="full")
 # Load serialized, fitted quantities
 la.load_state_dict(torch.load("state_dict.bin"))
 
@@ -87,9 +88,9 @@ model = get_model()
 la, model, margliks, losses = marglik_training(
     model=model,
     train_loader=train_loader,
-    likelihood="regression",
+    likelihood=likelihood,
     hessian_structure="full",
-    backend=BackPackGGN,
+    backend=None,
     n_epochs=n_epochs,
     optimizer_kwargs={"lr": 1e-2},
     prior_structure="scalar",

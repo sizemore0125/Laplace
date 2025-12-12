@@ -4,9 +4,8 @@ from typing import Any, Callable, MutableMapping
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
-
-from laplace.utils import Kron, Likelihood
+from laplace.likelihood import Likelihood as LikelihoodModule
+from laplace.utils import Kron
 
 
 class CurvatureInterface:
@@ -46,30 +45,22 @@ class CurvatureInterface:
     def __init__(
         self,
         model: nn.Module,
-        likelihood: Likelihood | str,
+        likelihood: LikelihoodModule,
         last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
         dict_key_y: str = "labels",
     ):
-        assert likelihood in [Likelihood.REGRESSION, Likelihood.CLASSIFICATION]
-        self.likelihood: Likelihood | str = likelihood
+        if not isinstance(likelihood, LikelihoodModule):
+            raise ValueError("CurvatureInterface now requires a Likelihood object.")
+        self.likelihood: str = likelihood.name
         self.model: nn.Module = model
         self.last_layer: bool = last_layer
         self.subnetwork_indices: torch.LongTensor | None = subnetwork_indices
         self.dict_key_x = dict_key_x
         self.dict_key_y = dict_key_y
-
-        if likelihood == "regression":
-            self.lossfunc: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = (
-                MSELoss(reduction="sum")
-            )
-            self.factor: float = 0.5
-        else:
-            self.lossfunc: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = (
-                CrossEntropyLoss(reduction="sum")
-            )
-            self.factor: float = 1.0
+        self.lossfunc = self._make_loss_fn(likelihood)
+        self.factor = likelihood.loss_factor()
 
         self.params: list[nn.Parameter] = [
             p for p in self._model.parameters() if p.requires_grad
@@ -84,6 +75,14 @@ class CurvatureInterface:
     @property
     def _model(self) -> nn.Module:
         return self.model.last_layer if self.last_layer else self.model
+
+    def _make_loss_fn(self, likelihood: LikelihoodModule):
+        def loss_fn(f, y):
+            return likelihood.loss(f, y, reduction="sum")
+
+        # mimic torch loss modules' `reduction` attribute expected by Curvlinops/KFAC
+        loss_fn.reduction = "sum"
+        return loss_fn
 
     def jacobians(
         self,
@@ -323,7 +322,7 @@ class GGNInterface(CurvatureInterface):
     def __init__(
         self,
         model: nn.Module,
-        likelihood: Likelihood | str,
+        likelihood: LikelihoodModule,
         last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",

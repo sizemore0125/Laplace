@@ -16,7 +16,8 @@ from curvlinops._base import _LinearOperator
 from torch import nn
 
 from laplace.curvature import CurvatureInterface, EFInterface, GGNInterface
-from laplace.utils import Kron, Likelihood
+from laplace.likelihood import Likelihood as LikelihoodModule
+from laplace.utils import Kron
 
 
 class CurvlinopsInterface(CurvatureInterface):
@@ -25,7 +26,7 @@ class CurvlinopsInterface(CurvatureInterface):
     def __init__(
         self,
         model: nn.Module,
-        likelihood: Likelihood | str,
+        likelihood: LikelihoodModule,
         last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
@@ -34,6 +35,15 @@ class CurvlinopsInterface(CurvatureInterface):
         super().__init__(
             model, likelihood, last_layer, subnetwork_indices, dict_key_x, dict_key_y
         )
+        self._likelihood = likelihood if isinstance(likelihood, LikelihoodModule) else None
+
+    def _loss_closure(self):
+        if self._likelihood is not None:
+            def loss_fn(f, target):
+                return self._likelihood.loss(f, target, reduction="sum")
+            loss_fn.reduction = "sum"
+            return loss_fn
+        return self.lossfunc
 
     @property
     def _kron_fisher_type(self) -> str:
@@ -84,9 +94,11 @@ class CurvlinopsInterface(CurvatureInterface):
         if isinstance(x, (dict, MutableMapping)):
             kwargs["batch_size_fn"] = lambda x: x[self.dict_key_x].shape[0]
 
+        loss_closure = self._loss_closure()
+
         linop = KFACLinearOperator(
             self.model,
-            self.lossfunc,
+            loss_closure,
             self.params,
             [(x, y)],
             fisher_type=self._kron_fisher_type,
@@ -103,7 +115,7 @@ class CurvlinopsInterface(CurvatureInterface):
         kron = self._rescale_kron_factors(kron, len(y), N)
         kron *= self.factor
 
-        loss = self.lossfunc(self.model(x), y)
+        loss = loss_closure(self.model(x), y)
 
         return self.factor * loss.detach(), kron
 
@@ -117,13 +129,14 @@ class CurvlinopsInterface(CurvatureInterface):
         if self.subnetwork_indices is not None:
             return super().full(x, y, **kwargs)
 
+        loss_closure = self._loss_closure()
         curvlinops_kwargs = {k: v for k, v in kwargs.items() if k != "N"}
         if isinstance(x, (dict, MutableMapping)):
             curvlinops_kwargs["batch_size_fn"] = lambda x: x[self.dict_key_x].shape[0]
 
         linop = self._linop_context(
             self.model,
-            self.lossfunc,
+            loss_closure,
             self.params,
             [(x, y)],
             check_deterministic=False,
@@ -136,7 +149,7 @@ class CurvlinopsInterface(CurvatureInterface):
         )
 
         f = self.model(x)
-        loss = self.lossfunc(f, y)
+        loss = loss_closure(f, y)
 
         return self.factor * loss.detach(), self.factor * H
 
@@ -147,7 +160,7 @@ class CurvlinopsGGN(CurvlinopsInterface, GGNInterface):
     def __init__(
         self,
         model: nn.Module,
-        likelihood: Likelihood | str,
+        likelihood: LikelihoodModule,
         last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",

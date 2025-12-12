@@ -5,7 +5,8 @@ from typing import Type
 import torch
 from torch import nn
 
-from laplace.baselaplace import DiagLaplace, FullLaplace, Likelihood, ParametricLaplace
+from laplace.baselaplace import DiagLaplace, FullLaplace, ParametricLaplace
+from laplace.likelihood import Likelihood as LikelihoodModule
 from laplace.curvature import EFInterface, GGNInterface
 from laplace.curvature.curvature import CurvatureInterface
 
@@ -76,7 +77,7 @@ class SubnetLaplace(ParametricLaplace):
     def __init__(
         self,
         model: nn.Module,
-        likelihood: Likelihood | str,
+        likelihood: LikelihoodModule,
         subnetwork_indices: torch.LongTensor,
         sigma_noise: float | torch.Tensor = 1.0,
         prior_precision: float | torch.Tensor = 1.0,
@@ -84,11 +85,7 @@ class SubnetLaplace(ParametricLaplace):
         temperature: float = 1.0,
         backend: Type[CurvatureInterface] | None = None,
         backend_kwargs: dict | None = None,
-        asdl_fisher_kwargs: dict | None = None,
     ) -> None:
-        if asdl_fisher_kwargs is not None:
-            raise ValueError("Subnetwork Laplace does not support asdl_fisher_kwargs.")
-
         self.H = None
         super().__init__(
             model,

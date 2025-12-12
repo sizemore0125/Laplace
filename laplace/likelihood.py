@@ -122,6 +122,14 @@ class Likelihood(torch.nn.Module, ABC):
         """Return diagonal Hessian blocks for functional Laplace."""
         raise NotImplementedError
 
+    def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:
+        """Return one Monte Carlo sample of the functional gradient."""
+        raise NotImplementedError
+
+    def functional_hessian(self, f: torch.Tensor) -> torch.Tensor | None:
+        """Return functional Hessian (or Fisher) wrt outputs; None if identity."""
+        return None
+
 
 class ClassificationLikelihood(Likelihood):
     """Multiclass classification via cross entropy."""
@@ -193,8 +201,13 @@ class ClassificationLikelihood(Likelihood):
         ps = torch.nn.functional.softmax(f_batch, dim=-1)
         return torch.diag_embed(ps) - torch.einsum("mk,mc->mck", ps, ps)
 
-    def functional_lambdas(self, f_batch: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
-        ps = torch.nn.functional.softmax(f_batch, dim=-1)
+    def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        y_sample = torch.distributions.Multinomial(logits=f).sample()
+        p = torch.softmax(f, dim=-1)
+        return p - y_sample
+
+    def functional_hessian(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        ps = torch.nn.functional.softmax(f, dim=-1)
         return torch.diag_embed(ps) - torch.einsum("mk,mc->mck", ps, ps)
 
 
@@ -295,6 +308,14 @@ class RegressionLikelihood(Likelihood):
         eye = torch.eye(C, device=f_batch.device, dtype=f_batch.dtype)
         return torch.unsqueeze(eye, 0).repeat(b, 1, 1)
 
+    def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        return torch.randn_like(f)
+
+    def functional_hessian(self, f: torch.Tensor) -> torch.Tensor | None:  # type: ignore[override]
+        b, c = f.shape
+        eye = torch.eye(c, device=f.device, dtype=f.dtype).expand(b, c, c)
+        return eye
+
 
 class RewardModelingLikelihood(Likelihood):
     """Bradley-Terry style preference learning (classification loss, placeholder predict)."""
@@ -358,3 +379,12 @@ class RewardModelingLikelihood(Likelihood):
 
     def is_classification_like(self) -> bool:  # type: ignore[override]
         return True
+
+    def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        y_sample = torch.distributions.Multinomial(logits=f).sample()
+        p = torch.softmax(f, dim=-1)
+        return p - y_sample
+
+    def functional_hessian(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        ps = torch.softmax(f, dim=-1)
+        return torch.diag_embed(ps) - torch.einsum("mk,mc->mck", ps, ps)

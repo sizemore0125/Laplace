@@ -4,6 +4,7 @@ from typing import Any, Callable, MutableMapping
 
 import torch
 from torch import nn
+import warnings
 from laplace.likelihood import Likelihood as LikelihoodModule
 from laplace.utils import Kron
 
@@ -53,7 +54,7 @@ class CurvatureInterface:
     ):
         if not isinstance(likelihood, LikelihoodModule):
             raise ValueError("CurvatureInterface now requires a Likelihood object.")
-        self.likelihood: str = likelihood.name
+        self.likelihood: LikelihoodModule = likelihood
         self.model: nn.Module = model
         self.last_layer: bool = last_layer
         self.subnetwork_indices: torch.LongTensor | None = subnetwork_indices
@@ -344,15 +345,7 @@ class GGNInterface(CurvatureInterface):
         F = 0
 
         for _ in range(self.num_samples):
-            if self.likelihood == "regression":
-                # N(y | f, 1)
-                y_sample = f + torch.randn(f.shape, device=f.device, dtype=f.dtype)
-                grad_sample = f - y_sample  # functional MSE grad
-            else:  # classification with softmax
-                y_sample = torch.distributions.Multinomial(logits=f).sample()
-                # First functional derivative of the loglik is p - y
-                p = torch.softmax(f, dim=-1)
-                grad_sample = p - y_sample
+            grad_sample = self.likelihood.sample_functional_grad(f)
 
             F += (
                 1
@@ -363,13 +356,15 @@ class GGNInterface(CurvatureInterface):
         return F
 
     def _get_functional_hessian(self, f: torch.Tensor) -> torch.Tensor | None:
-        if self.likelihood == "regression":
-            return None
-        else:
-            # second derivative of log lik is diag(p) - pp^T
-            ps = torch.softmax(f, dim=-1)
-            G = torch.diag_embed(ps) - torch.einsum("mk,mc->mck", ps, ps)
-            return G
+        H = self.likelihood.functional_hessian(f)
+        if H is None:
+            warnings.warn(
+                "functional_hessian returned None; falling back to identity/J^T J. "
+                "Implement functional_hessian in your likelihood or use a Fisher backend "
+                "for better curvature.",
+                RuntimeWarning,
+            )
+        return H
 
     def full(
         self,

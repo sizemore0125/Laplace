@@ -155,11 +155,10 @@ def main():
     train_map(model, loader)
 
     likelihood = OccupancyLikelihood(n_visits)
+    # Last-layer Laplace is not compatible with the multi-head occupancy model.
     variants = [
         ("full", "all", model),
         ("diag", "all", model),
-        ("full", "last_layer", OccupancyModel(n_visits)),
-        ("diag", "last_layer", OccupancyModel(n_visits)),
     ]
 
     curves = []
@@ -205,8 +204,6 @@ def main():
     colors = {
         ("full", "all"): "#16a34a",
         ("diag", "all"): "#0ea5e9",
-        ("full", "last_layer"): "#f59e0b",
-        ("diag", "last_layer"): "#ef4444",
     }
     for hess, subset, mean, std in curves:
         label = f"{subset}-{hess}"

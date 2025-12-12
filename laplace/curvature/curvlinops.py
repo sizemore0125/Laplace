@@ -35,15 +35,14 @@ class CurvlinopsInterface(CurvatureInterface):
         super().__init__(
             model, likelihood, last_layer, subnetwork_indices, dict_key_x, dict_key_y
         )
-        self._likelihood = likelihood if isinstance(likelihood, LikelihoodModule) else None
+        self._likelihood = likelihood
 
     def _loss_closure(self):
-        if self._likelihood is not None:
-            def loss_fn(f, target):
-                return self._likelihood.loss(f, target, reduction="sum")
-            loss_fn.reduction = "sum"
-            return loss_fn
-        return self.lossfunc
+        def loss_fn(f, target):
+            return self._likelihood.loss(f, target, reduction="sum")
+
+        loss_fn.reduction = "sum"
+        return loss_fn
 
     @property
     def _kron_fisher_type(self) -> str:

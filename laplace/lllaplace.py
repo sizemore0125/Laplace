@@ -163,6 +163,7 @@ class LLLaplace(ParametricLaplace):
         fs = torch.stack(fs)
         return self._likelihood.transform_function_samples(fs)
 
+    @property
     def prior_precision_diag(self) -> torch.Tensor:  # type: ignore[override]
         if (
             isinstance(self.prior_precision, float) or len(self.prior_precision) == 1

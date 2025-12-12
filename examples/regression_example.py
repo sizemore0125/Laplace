@@ -3,7 +3,7 @@ import torch
 from helper.dataloaders import get_sinusoid_example
 from helper.util import plot_regression
 
-from laplace import Laplace, marglik_training
+from laplace import Laplace
 from laplace.likelihood import RegressionLikelihood
 
 n_epochs = 1000
@@ -83,31 +83,6 @@ plot_regression(
     X_train, y_train, x, f_mu, pred_std, file_name="regression_example", plot=False
 )
 
-# alternatively, optimize parameters and hyperparameters of the prior jointly
-model = get_model()
-la, model, margliks, losses = marglik_training(
-    model=model,
-    train_loader=train_loader,
-    likelihood=likelihood,
-    hessian_structure="full",
-    backend=None,
-    n_epochs=n_epochs,
-    optimizer_kwargs={"lr": 1e-2},
-    prior_structure="scalar",
-)
-
-print(
-    f"sigma={la.sigma_noise.item():.2f}",
-    f"prior precision={la.prior_precision.numpy()}",
-)
-
-f_mu, f_var = la(X_test)
-f_mu = f_mu.squeeze().detach().cpu().numpy()
-f_sigma = f_var.squeeze().sqrt().cpu().numpy()
-pred_std = np.sqrt(f_sigma**2 + la.sigma_noise.item() ** 2)
-plot_regression(
-    X_train,
-    y_train,
     x,
     f_mu,
     pred_std,

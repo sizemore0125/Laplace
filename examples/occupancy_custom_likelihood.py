@@ -84,6 +84,26 @@ class OccupancyLikelihood(Likelihood):
         if not torch.allclose(sigma, torch.ones_like(sigma)):
             raise ValueError("sigma_noise must be 1 for occupancy likelihood.")
 
+    def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:
+        # Use mean-field approximation: gradients of log-lik w.r.t. logits under mean y.
+        psi = torch.sigmoid(f[:, :1])
+        p = torch.sigmoid(f[:, 1:])
+        # Expected detections: psi * p per visit; expected any detection per site
+        y_mean = psi * p
+        psi_grad = psi - (1 - y_mean.prod(dim=1, keepdim=True))
+        p_grad = p - y_mean
+        return torch.cat([psi_grad, p_grad], dim=1)
+
+    def functional_hessian(self, f: torch.Tensor) -> torch.Tensor:
+        # Diagonal Fisher-style approximation using Bernoulli variance of logits.
+        psi = torch.sigmoid(f[:, :1])
+        p = torch.sigmoid(f[:, 1:])
+        var_diag = torch.cat([psi * (1 - psi), p * (1 - p)], dim=1)
+        b, c = var_diag.shape
+        H = torch.zeros(b, c, c, device=f.device, dtype=f.dtype)
+        H[:, torch.arange(c), torch.arange(c)] = var_diag
+        return H
+
     def is_classification_like(self) -> bool:
         return True
 
@@ -121,12 +141,14 @@ def simulate_data(n_sites=400, n_visits=3, seed=0):
     x_psi = torch.rand(n_sites, 2) * 2 - 1  # in [-1,1]
     x_p = torch.rand(n_sites, 2) * 2 - 1
     X = torch.cat([x_psi, x_p], dim=1)
-    psi_true = torch.sigmoid(4.0 * x_psi[:, :1] - 4.0 * x_psi[:, 1:])  # sharper boundary
-    p_true = torch.sigmoid(3.0 * x_p[:, :1] + 2.0 * x_p[:, 1:])
+    # Strong, single-covariate occupancy curve for clear separation
+    psi_true = torch.sigmoid(8.0 * x_psi[:, :1])
+    # High and nearly constant detection to reveal the occupancy signal
+    p_true = torch.full((n_sites, n_visits), 0.9, device=X.device, dtype=X.dtype)
     psi_sample = torch.bernoulli(psi_true)
     y = torch.zeros(n_sites, n_visits)
     for j in range(n_visits):
-        detections = torch.bernoulli(psi_sample * p_true)
+        detections = torch.bernoulli(psi_sample * p_true[:, j : j + 1])
         y[:, j] = detections.squeeze(1)
     return X, y.long()
 

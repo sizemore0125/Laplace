@@ -17,7 +17,7 @@ class CurvatureInterface:
 
     Parameters
     ----------
-    model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
+    model : torch.nn.Module
         torch model (neural network)
     likelihood : {'classification', 'regression'}
     subnetwork_indices : torch.LongTensor, default=None
@@ -224,7 +224,7 @@ class GGNInterface(CurvatureInterface):
 
     Parameters
     ----------
-    model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
+    model : torch.nn.Module
         torch model (neural network)
     likelihood : {'classification', 'regression'}
     subnetwork_indices : torch.Tensor, default=None
@@ -355,7 +355,7 @@ class EFInterface(CurvatureInterface):
 
     Parameters
     ----------
-    model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
+    model : torch.nn.Module
         torch model (neural network)
     likelihood : {'classification', 'regression'}
     subnetwork_indices : torch.Tensor, default=None

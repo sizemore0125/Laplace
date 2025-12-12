@@ -40,12 +40,8 @@ class BaseLaplace:
     Parameters
     ----------
     model : torch.nn.Module
-    likelihood : Likelihood or str in {'classification', 'regression', 'reward_modeling'}
+    likelihood : Likelihood or str in {'classification', 'regression'}
         determines the log likelihood Hessian approximation.
-        In the case of 'reward_modeling', it fits Laplace using the classification likelihood,
-        then does prediction as in regression likelihood. The model needs to be defined accordingly:
-        The forward pass during training takes `x.shape == (batch_size, 2, dim)` with
-        `y.shape = (batch_size,)`. Meanwhile, during evaluation `x.shape == (batch_size, dim)`.
     sigma_noise : torch.Tensor or float, default=1
         observation noise for the regression setting; must be 1 for classification
     prior_precision : torch.Tensor or float, default=1
@@ -565,7 +561,7 @@ class BaseLaplace:
             `(batch_size, input_shape)` if tensor. If MutableMapping, must contain
             the said tensor.
 
-        likelihood : Likelihood or str in {'classification', 'regression', 'reward_modeling'}
+        likelihood : Likelihood or str in {'classification', 'regression'}
             determines the log likelihood Hessian approximation.
 
         link_approx : {'mc', 'probit', 'bridge', 'bridge_norm'}

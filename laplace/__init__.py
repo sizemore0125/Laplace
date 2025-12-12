@@ -4,7 +4,6 @@
 .. include:: ../examples/regression_example.md
 .. include:: ../examples/calibration_example.md
 .. include:: ../examples/huggingface_example.md
-.. include:: ../examples/reward_modeling_example.md
 """
 
 from laplace.baselaplace import (
@@ -14,7 +13,6 @@ from laplace.baselaplace import (
     ParametricLaplace,
 )
 from laplace.laplace import Laplace
-from laplace.marglik_training import marglik_training
 from laplace.subnetlaplace import DiagSubnetLaplace, FullSubnetLaplace, SubnetLaplace
 from laplace.utils.enums import (
     HessianStructure,
@@ -35,7 +33,6 @@ __all__ = [
     "SubnetLaplace",  # base-class subnetwork
     "FullSubnetLaplace",
     "DiagSubnetLaplace",  # subnetwork
-    "marglik_training",
     # Enums
     "SubsetOfWeights",
     "HessianStructure",

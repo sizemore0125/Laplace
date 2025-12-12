@@ -7,7 +7,6 @@ from laplace.utils.enums import (
     SubsetOfWeights,
     TuningMethod,
 )
-from laplace.utils.feature_extractor import FeatureExtractor
 from laplace.utils.metrics import RunningNLLMetric
 from laplace.utils.subnetmask import (
     LargestMagnitudeSubnetMask,
@@ -49,7 +48,6 @@ __all__ = [
     "_is_valid_scalar",
     "expand_prior_precision",
     "fix_prior_prec_structure",
-    "FeatureExtractor",
     "fit_diagonal_swag_var",
     "SubnetMask",
     "RandomSubnetMask",

@@ -317,69 +317,6 @@ class RegressionLikelihood(Likelihood):
         return eye
 
 
-class RewardModelingLikelihood(Likelihood):
-    """Bradley-Terry style preference learning (classification loss, placeholder predict)."""
-
-    def __init__(self) -> None:
-        super().__init__(name="reward_modeling")
-
-    def forward(
-        self,
-        f: torch.Tensor,
-        y: torch.Tensor,
-        *,
-        reduction: str = "mean",
-        temperature: float = 1.0,
-    ) -> torch.Tensor:
-        # Expect f shape (batch, 2) with y in {0,1}; standard CE on pairwise scores.
-        return torch.nn.functional.cross_entropy(
-            f / temperature, y, reduction=reduction
-        )
-
-    def predict(
-        self,
-        f: torch.Tensor,
-        *,
-        temperature: float = 1.0,
-        link: str = "softmax",
-    ) -> torch.Tensor:
-        return torch.nn.functional.softmax(f / temperature, dim=-1)
-
-    def check_sigma_noise(self, sigma_noise: torch.Tensor | float) -> None:
-        sigma = torch.as_tensor(sigma_noise)
-        if sigma.ndim == 0:
-            sigma = sigma.reshape(1)
-        if not torch.allclose(sigma, torch.ones_like(sigma)):
-            raise ValueError("sigma_noise must be 1 for reward modeling likelihood.")
-
-    def transform_function_samples(self, samples: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.softmax(samples, dim=-1)
-
-    def default_metric(
-        self, num_outputs: int, device: torch.device
-    ) -> torch.nn.Module | None:
-        try:
-            from laplace.utils.metrics import RunningNLLMetric  # local import
-        except Exception:
-            return None
-        return RunningNLLMetric().to(device)
-
-    def prediction_kind(self, fitting: bool) -> str:  # type: ignore[override]
-        return "classification" if fitting else "regression"
-
-    def scatter_mean(
-        self,
-        Js: torch.Tensor,
-        f: torch.Tensor,
-        y: torch.Tensor,
-        prior_mean: torch.Tensor,
-        mean: torch.Tensor,
-    ) -> torch.Tensor:  # type: ignore[override]
-        return -torch.einsum("bcp,p->bc", Js, prior_mean - mean)
-
-    def is_classification_like(self) -> bool:  # type: ignore[override]
-        return True
-
     def sample_functional_grad(self, f: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
         y_sample = torch.distributions.Multinomial(logits=f).sample()
         p = torch.softmax(f, dim=-1)

@@ -36,9 +36,6 @@ class Likelihood(str, Enum):
     CLASSIFICATION = "classification"
     """Classification, assuming `loss_fn = nn.CrossEntropyLoss()`."""
 
-    REWARD_MODELING = "reward_modeling"
-    """Bradley-Terry likelihood, for preference learning / reward modeling."""
-
 
 class PredType(str, Enum):
     """Valid options for `pred_type`."""

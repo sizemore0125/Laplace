@@ -2,7 +2,6 @@
 
 We show how the marginal likelihood can be used after training a MAP network on a simple sinusoidal regression task.
 Subsequently, we use the optimized LA to predict which provides uncertainty on top of the MAP prediction.
-We also show how the `marglik_training` utility method can be used to jointly train the MAP and hyperparameters.
 First, we set up the training data for the problem with observation noise \(\sigma=0.3\):
 
 ```python
@@ -11,7 +10,7 @@ from laplace.curvature.backpack import BackPackGGN
 import numpy as np
 import torch
 
-from laplace import Laplace, marglik_training
+from laplace import Laplace
 
 from helper.dataloaders import get_sinusoid_example
 from helper.util import plot_regression
@@ -52,7 +51,7 @@ for i in range(n_epochs):
 With the MAP-trained model at hand, we can estimate the prior precision and observation noise
 using empirical Bayes after training.
 The `Laplace` method is called to construct a LA for `"regression"` with `"all"` weights.
-As default `Laplace` returns a Kronecker factored LA, we use `"full"` instead on this small example.
+We use `"full"` on this small example.
 We fit the LA to the training data and initialize `log_prior` and `log_sigma`.
 Using Adam, we minimize the negative log marginal likelihood for `n_epochs`.
 
@@ -69,8 +68,7 @@ for i in range(n_epochs):
 ```
 
 The obtained observation noise is close to the ground truth with a value of \(\sigma \approx 0.28\)
-without the need for any validation data.
-The resulting prior precision is \(\delta \approx 0.10\).
+without the need for any validation data. The resulting prior precision is \(\delta \approx 0.10\).
 
 ## Bayesian predictive
 
@@ -92,29 +90,3 @@ plot_regression(X_train, y_train, x, f_mu, pred_std)
 
 In comparison to the MAP, the predictive shows useful uncertainties.
 When our MAP is over or underfit, the Laplace approximation cannot fix this anymore.
-In this case, joint optimization of MAP and marginal likelihood can be useful.
-
-## Jointly optimize MAP and hyperparameters using online empirical Bayes
-
-We provide a utility method `marglik_training` that implements the algorithm proposed in [1].
-The method optimizes the neural network and the hyperparameters in an interleaved way
-and returns an optimally regularized LA.
-Below, we use this method and plot the corresponding predictive uncertainties again:
-
-```python
-model = get_model()
-la, model, margliks, losses = marglik_training(
-    model=model, train_loader=train_loader, likelihood="regression",
-    hessian_structure="full", backend=BackPackGGN, n_epochs=n_epochs,
-    optimizer_kwargs={"lr": 1e-2}, prior_structure="scalar"
-)
-
-f_mu, f_var = la(X_test)
-f_mu = f_mu.squeeze().detach().cpu().numpy()
-f_sigma = f_var.squeeze().sqrt().cpu().numpy()
-pred_std = np.sqrt(f_sigma**2 + la.sigma_noise.item()**2)
-
-plot_regression(X_train, y_train, x, f_mu, pred_std)
-```
-
-![Online Laplace](assets/regression_example_online.png)

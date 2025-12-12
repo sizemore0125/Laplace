@@ -14,7 +14,6 @@ nav:
   - "Example: GP Inference": calibration_gp_example.md
   - "Example: MC Acquistion Functions": expectation_example.md
   - "Example: Huggingface LLMs": huggingface_example.md
-  - "Example: Reward Modeling": reward_modeling_example.md
   - API Reference:
       - Laplace Frontend: api_reference/laplace.md
       - Laplace Options: api_reference/enums.md
@@ -23,7 +22,6 @@ nav:
       - Functional Laplace: api_reference/functionallaplace.md
       - Subnet Laplace: api_reference/subnetlaplace.md
       - Curvatures: api_reference/curvatures.md
-      - Marglik Training Utils: api_reference/marglik_training.md
       - Utilities: api_reference/utils.md
 
 theme:

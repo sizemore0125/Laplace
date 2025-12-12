@@ -155,17 +155,13 @@ def main():
     train_map(model, loader)
 
     likelihood = OccupancyLikelihood(n_visits)
-    # Last-layer Laplace is not compatible with the multi-head occupancy model.
     variants = [
-        ("full", "all", model),
-        ("diag", "all", model),
+        ("full", model),
+        ("diag", model),
     ]
 
     curves = []
-    for hess, subset, mdl in variants:
-        # retrain last-layer models to MAP if needed
-        if subset == "last_layer":
-            train_map(mdl, loader)
+    for hess, mdl in variants:
         # sweep first psi covariate; hold others at mean
         x1_grid = torch.linspace(-1.2, 1.2, 200).unsqueeze(1)
         x2_const = torch.zeros_like(x1_grid)
@@ -175,7 +171,7 @@ def main():
         la = Laplace(
             mdl,
             likelihood,
-            subset_of_weights=subset,
+            subset_of_weights="all",
             hessian_structure=hess,
             prior_precision=10.0,
         )
@@ -183,7 +179,7 @@ def main():
         samples = la._nn_predictive_samples(X_grid, n_samples=200)
         psi_mean = samples.mean(0).squeeze().detach().numpy()
         psi_std = samples.std(0).squeeze().detach().numpy()
-        curves.append((hess, subset, psi_mean, psi_std))
+        curves.append((hess, psi_mean, psi_std))
 
     # use the grid from the last iteration for plotting the MAP curve from the baseline model
     x_np = x1_grid.squeeze().numpy()
@@ -202,12 +198,12 @@ def main():
     )
     ax.plot(x_np, psi_map, linestyle="--", color="#1f9d55", label="MAP psi")
     colors = {
-        ("full", "all"): "#16a34a",
-        ("diag", "all"): "#0ea5e9",
+        "full": "#16a34a",
+        "diag": "#0ea5e9",
     }
-    for hess, subset, mean, std in curves:
-        label = f"{subset}-{hess}"
-        color = colors.get((hess, subset), "#16a34a")
+    for hess, mean, std in curves:
+        label = hess
+        color = colors.get(hess, "#16a34a")
         ax.plot(x_np, mean, color=color, label=f"{label} mean")
         ax.fill_between(
             x_np,

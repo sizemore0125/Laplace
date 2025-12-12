@@ -140,7 +140,7 @@ model.eval()
 la = Laplace(
     model,
     likelihood="classification",
-    subset_of_weights="last_layer",
+    subset_of_weights="all",
     hessian_structure="full",
     # This must reflect faithfully the reduction technique used in the model
     # Otherwise, correctness is not guaranteed
@@ -171,7 +171,7 @@ easily by doing so!
 ```python
 model.eval()
 
-# Enable grad only for the last layer
+# Enable grad only for the classifier head
 
 for p in model.hf_model.parameters():
     p.requires_grad = False

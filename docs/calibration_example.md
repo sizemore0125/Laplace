@@ -1,4 +1,4 @@
-An advantage of the Laplace approximation over variational Bayes and Markov Chain Monte Carlo methods is its _post-hoc_ nature. That means we can apply LA on (almost) any _pre-trained_ neural network. In this example, we will see how we can apply the last-layer LA on a deep WideResNet model, trained on CIFAR-10.
+An advantage of the Laplace approximation over variational Bayes and Markov Chain Monte Carlo methods is its _post-hoc_ nature. That means we can apply LA on (almost) any _pre-trained_ neural network. In this example, we will see how we can apply the LA on a deep WideResNet model, trained on CIFAR-10.
 
 ## Data loading
 
@@ -78,12 +78,12 @@ Running this snippet, we would get:
 
 ## The calibration of Laplace
 
-Now we inspect the benefit of the LA. Let us apply the simple last-layer LA model, and optimize the prior precision hyperparameter using a _post-hoc_ marginal likelihood maximization.
+Now we inspect the benefit of the LA. Let us apply a standard all-weights LA model, and optimize the prior precision hyperparameter using a _post-hoc_ marginal likelihood maximization.
 
 ```python
 # Laplace
 la = Laplace(model, "classification",
-             subset_of_weights="last_layer",
+             subset_of_weights="all",
              hessian_structure="kron")
 la.fit(train_loader)
 la.optimize_prior_precision(method="marglik")
@@ -106,4 +106,4 @@ Running this snippet, we obtain:
 [Laplace] Acc.: 94.8%; ECE: 0.8%; NLL: 0.157
 ```
 
-Notice that the last-layer LA does not do any harm to the accuracy, yet it improves the calibration of the MAP model substantially.
+Notice that the LA does not do any harm to the accuracy, yet it improves the calibration of the MAP model substantially.

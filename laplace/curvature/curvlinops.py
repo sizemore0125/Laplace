@@ -7,17 +7,14 @@ import torch
 from curvlinops import (
     EFLinearOperator,
     FisherMCLinearOperator,
-    FisherType,
     GGNLinearOperator,
     HessianLinearOperator,
-    KFACLinearOperator,
 )
 from curvlinops._base import _LinearOperator
 from torch import nn
 
 from laplace.curvature import CurvatureInterface, EFInterface, GGNInterface
 from laplace.likelihood import Likelihood as LikelihoodModule
-from laplace.utils import Kron
 
 
 class CurvlinopsInterface(CurvatureInterface):
@@ -27,13 +24,12 @@ class CurvlinopsInterface(CurvatureInterface):
         self,
         model: nn.Module,
         likelihood: LikelihoodModule,
-        last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
         dict_key_y: str = "labels",
     ) -> None:
         super().__init__(
-            model, likelihood, last_layer, subnetwork_indices, dict_key_x, dict_key_y
+            model, likelihood, subnetwork_indices, dict_key_x, dict_key_y
         )
         self._likelihood = likelihood
 
@@ -45,78 +41,8 @@ class CurvlinopsInterface(CurvatureInterface):
         return loss_fn
 
     @property
-    def _kron_fisher_type(self) -> str:
-        raise NotImplementedError
-
-    @property
     def _linop_context(self) -> type[_LinearOperator]:
         raise NotImplementedError
-
-    @staticmethod
-    def _rescale_kron_factors(kron: Kron, M: int, N: int) -> Kron:
-        # Renormalize Kronecker factor to sum up correctly over N data points with
-        # batches of M. For M=N (full-batch) just M/N=1
-        for F in kron.kfacs:
-            if len(F) == 2:
-                F[1] *= M / N
-        return kron
-
-    def _get_kron_factors(self, linop: KFACLinearOperator) -> Kron:
-        kfacs = list()
-        for name, module in self.model.named_modules():
-            if name not in linop._mapping.keys():
-                continue
-
-            A = linop._input_covariances[name]
-            B = linop._gradient_covariances[name]
-
-            if hasattr(module, "bias") and module.bias is not None:
-                kfacs.append([B, A])
-                kfacs.append([B])
-            elif hasattr(module, "weight"):
-                p, q = B.numel(), A.numel()
-                if p == q == 1:
-                    kfacs.append([B * A])
-                else:
-                    kfacs.append([B, A])
-            else:
-                raise ValueError(f"Whats happening with {module}?")
-        return Kron(kfacs)
-
-    def kron(
-        self,
-        x: torch.Tensor | MutableMapping[str, torch.Tensor | Any],
-        y: torch.Tensor,
-        N: int,
-        **kwargs: dict[str, Any],
-    ) -> tuple[torch.Tensor, Kron]:
-        if isinstance(x, (dict, MutableMapping)):
-            kwargs["batch_size_fn"] = lambda x: x[self.dict_key_x].shape[0]
-
-        loss_closure = self._loss_closure()
-
-        linop = KFACLinearOperator(
-            self.model,
-            loss_closure,
-            self.params,
-            [(x, y)],
-            fisher_type=self._kron_fisher_type,
-            separate_weight_and_bias=True,
-            check_deterministic=False,  # To avoid overhead
-            # `kwargs` for `mc_samples` when `stochastic=True` and `kfac_approx` to
-            # choose between `'expand'` and `'reduce'`.
-            # Defaults to `mc_samples=1` and `kfac_approx='expand'.
-            **kwargs,
-        )
-        linop._compute_kfac()
-
-        kron = self._get_kron_factors(linop)
-        kron = self._rescale_kron_factors(kron, len(y), N)
-        kron *= self.factor
-
-        loss = loss_closure(self.model(x), y)
-
-        return self.factor * loss.detach(), kron
 
     def full(
         self,
@@ -160,20 +86,15 @@ class CurvlinopsGGN(CurvlinopsInterface, GGNInterface):
         self,
         model: nn.Module,
         likelihood: LikelihoodModule,
-        last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
         dict_key_y: str = "labels",
         stochastic: bool = False,
     ) -> None:
         super().__init__(
-            model, likelihood, last_layer, subnetwork_indices, dict_key_x, dict_key_y
+            model, likelihood, subnetwork_indices, dict_key_x, dict_key_y
         )
         self.stochastic = stochastic
-
-    @property
-    def _kron_fisher_type(self) -> FisherType:
-        return FisherType.MC if self.stochastic else FisherType.TYPE2
 
     @property
     def _linop_context(self) -> type[_LinearOperator]:
@@ -182,10 +103,6 @@ class CurvlinopsGGN(CurvlinopsInterface, GGNInterface):
 
 class CurvlinopsEF(CurvlinopsInterface, EFInterface):
     """Implementation of `EFInterface` using Curvlinops."""
-
-    @property
-    def _kron_fisher_type(self) -> FisherType:
-        return FisherType.EMPIRICAL
 
     @property
     def _linop_context(self) -> type[_LinearOperator]:

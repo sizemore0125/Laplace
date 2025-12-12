@@ -102,7 +102,7 @@ model.eval()
 la = Laplace(
     model,
     likelihood="classification",
-    subset_of_weights="last_layer",
+    subset_of_weights="all",
     hessian_structure="full",
     # This must reflect faithfully the reduction technique used in the model
     # Otherwise, correctness is not guaranteed
@@ -123,7 +123,7 @@ del la
 model = MyGPT2(tokenizer)
 model.eval()
 
-# Enable grad only for the last layer
+# Enable grad only for the classifier head
 for p in model.hf_model.parameters():
     p.requires_grad = False
 
@@ -173,7 +173,7 @@ lora_la = Laplace(
     lora_model,
     likelihood="classification",
     subset_of_weights="all",
-    hessian_structure="kron",
+    hessian_structure="diag",
 )
 # lora_la.fit(dataloader)
 

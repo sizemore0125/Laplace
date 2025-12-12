@@ -3,27 +3,18 @@ import torch
 from torch import nn
 from torch.nn.utils import parameters_to_vector
 
-from laplace.baselaplace import DiagLaplace, FullLaplace, KronLaplace
+from laplace.baselaplace import DiagLaplace, FullLaplace
 from laplace.laplace import Laplace
-from laplace.lllaplace import DiagLLLaplace, FullLLLaplace, KronLLLaplace
 
 torch.manual_seed(240)
 torch.set_default_dtype(torch.double)
 flavors = [
     FullLaplace,
-    KronLaplace,
     DiagLaplace,
-    FullLLLaplace,
-    KronLLLaplace,
-    DiagLLLaplace,
 ]
 all_keys = [
     ("all", "full"),
-    ("all", "kron"),
     ("all", "diag"),
-    ("last_layer", "full"),
-    ("last_layer", "kron"),
-    ("last_layer", "diag"),
 ]
 
 
@@ -34,9 +25,9 @@ def model():
 
 
 def test_default_init(model, likelihood="classification"):
-    # test if default initialization works, id=(last-layer, kron)
+    # test if default initialization works, id=(all, full)
     lap = Laplace(model, likelihood)
-    assert isinstance(lap, KronLLLaplace)
+    assert isinstance(lap, FullLaplace)
 
 
 @pytest.mark.parametrize("laplace, key", zip(flavors, all_keys))

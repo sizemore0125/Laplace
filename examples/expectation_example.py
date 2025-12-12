@@ -27,7 +27,7 @@ la = Laplace(
     model,
     Likelihood.REGRESSION,
     subset_of_weights=SubsetOfWeights.ALL,
-    hessian_structure=HessianStructure.KRON,
+    hessian_structure=HessianStructure.FULL,
     enable_backprop=True,
 )
 la.fit(train_loader)

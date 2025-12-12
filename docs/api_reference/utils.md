@@ -26,5 +26,4 @@
             - "LargestVarianceSWAGSubnetMask"
             - "ParamNameSubnetMask"
             - "ModuleNameSubnetMask"
-            - "LastLayerSubnetMask"
             - "RunningNLLMetric"

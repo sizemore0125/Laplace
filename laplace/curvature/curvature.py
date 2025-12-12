@@ -6,13 +6,12 @@ import torch
 from torch import nn
 import warnings
 from laplace.likelihood import Likelihood as LikelihoodModule
-from laplace.utils import Kron
 
 
 class CurvatureInterface:
     """Interface to access curvature for a model and corresponding likelihood.
     A `CurvatureInterface` must inherit from this baseclass and implement the
-    necessary functions `jacobians`, `full`, `kron`, and `diag`.
+    necessary functions `jacobians`, `full`, and `diag`.
     The interface might be extended in the future to account for other curvature
     structures, for example, a block-diagonal one.
 
@@ -21,8 +20,6 @@ class CurvatureInterface:
     model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
         torch model (neural network)
     likelihood : {'classification', 'regression'}
-    last_layer : bool, default=False
-        only consider curvature of last layer
     subnetwork_indices : torch.LongTensor, default=None
         indices of the vectorized model parameters that define the subnetwork
         to apply the Laplace approximation over
@@ -47,7 +44,6 @@ class CurvatureInterface:
         self,
         model: nn.Module,
         likelihood: LikelihoodModule,
-        last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
         dict_key_y: str = "labels",
@@ -56,7 +52,6 @@ class CurvatureInterface:
             raise ValueError("CurvatureInterface now requires a Likelihood object.")
         self.likelihood: LikelihoodModule = likelihood
         self.model: nn.Module = model
-        self.last_layer: bool = last_layer
         self.subnetwork_indices: torch.LongTensor | None = subnetwork_indices
         self.dict_key_x = dict_key_x
         self.dict_key_y = dict_key_y
@@ -75,7 +70,7 @@ class CurvatureInterface:
 
     @property
     def _model(self) -> nn.Module:
-        return self.model.last_layer if self.last_layer else self.model
+        return self.model
 
     def _make_loss_fn(self, likelihood: LikelihoodModule):
         def loss_fn(f, y):
@@ -125,44 +120,6 @@ class CurvatureInterface:
 
         if self.subnetwork_indices is not None:
             Js = Js[:, :, self.subnetwork_indices]
-
-        return (Js, f) if enable_backprop else (Js.detach(), f.detach())
-
-    def last_layer_jacobians(
-        self,
-        x: torch.Tensor | MutableMapping[str, torch.Tensor | Any],
-        enable_backprop: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute Jacobians \\(\\nabla_{\\theta_\\textrm{last}} f(x;\\theta_\\textrm{last})\\)
-        only at current last-layer parameter \\(\\theta_{\\textrm{last}}\\).
-
-        Parameters
-        ----------
-        x : torch.Tensor
-        enable_backprop : bool, default=False
-
-        Returns
-        -------
-        Js : torch.Tensor
-            Jacobians `(batch, outputs, last-layer-parameters)`
-        f : torch.Tensor
-            output function `(batch, outputs)`
-        """
-        f, phi = self.model.forward_with_features(x)
-        bsize = phi.shape[0]
-        output_size = int(f.numel() / bsize)
-
-        # calculate Jacobians using the feature vector 'phi'
-        p = next(self.model.parameters())
-        identity = (
-            torch.eye(output_size, device=p.device, dtype=p.dtype)
-            .unsqueeze(0)
-            .tile(bsize, 1, 1)
-        )
-        # Jacobians are batch x output x params
-        Js = torch.einsum("kp,kij->kijp", phi, identity).reshape(bsize, output_size, -1)
-        if self.model.last_layer.bias is not None:
-            Js = torch.cat([Js, identity], dim=2)
 
         return (Js, f) if enable_backprop else (Js.detach(), f.detach())
 
@@ -233,37 +190,6 @@ class CurvatureInterface:
         """
         raise NotImplementedError
 
-    def kron(
-        self,
-        x: torch.Tensor | MutableMapping[str, torch.Tensor | Any],
-        y: torch.Tensor,
-        N: int,
-        **kwargs: dict[str, Any],
-    ) -> tuple[torch.Tensor, Kron]:
-        """Compute a Kronecker factored curvature approximation (such as KFAC).
-        The approximation to \\(H\\) takes the form of two Kronecker factors \\(Q, H\\),
-        i.e., \\(H \\approx Q \\otimes H\\) for each Module in the neural network permitting
-        such curvature.
-        \\(Q\\) is quadratic in the input-dimension of a module \\(p_{in} \\times p_{in}\\)
-        and \\(H\\) in the output-dimension \\(p_{out} \\times p_{out}\\).
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            input data `(batch, input_shape)`
-        y : torch.Tensor
-            labels `(batch, label_shape)`
-        N : int
-            total number of data points
-
-        Returns
-        -------
-        loss : torch.Tensor
-        H : `laplace.utils.matrix.Kron`
-            Kronecker factored Hessian approximation.
-        """
-        raise NotImplementedError
-
     def diag(
         self,
         x: torch.Tensor | MutableMapping[str, torch.Tensor | Any],
@@ -301,8 +227,6 @@ class GGNInterface(CurvatureInterface):
     model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
         torch model (neural network)
     likelihood : {'classification', 'regression'}
-    last_layer : bool, default=False
-        only consider curvature of last layer
     subnetwork_indices : torch.Tensor, default=None
         indices of the vectorized model parameters that define the subnetwork
         to apply the Laplace approximation over
@@ -324,7 +248,6 @@ class GGNInterface(CurvatureInterface):
         self,
         model: nn.Module,
         likelihood: LikelihoodModule,
-        last_layer: bool = False,
         subnetwork_indices: torch.LongTensor | None = None,
         dict_key_x: str = "input_ids",
         dict_key_y: str = "labels",
@@ -335,7 +258,7 @@ class GGNInterface(CurvatureInterface):
         self.num_samples: int = num_samples
 
         super().__init__(
-            model, likelihood, last_layer, subnetwork_indices, dict_key_x, dict_key_y
+            model, likelihood, subnetwork_indices, dict_key_x, dict_key_y
         )
 
     def _get_mc_functional_fisher(self, f: torch.Tensor) -> torch.Tensor:
@@ -374,7 +297,6 @@ class GGNInterface(CurvatureInterface):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute the full GGN \\(P \\times P\\) matrix as Hessian approximation
         \\(H_{ggn}\\) with respect to parameters \\(\\theta \\in \\mathbb{R}^P\\).
-        For last-layer, reduced to \\(\\theta_{last}\\)
 
         Parameters
         ----------
@@ -389,7 +311,7 @@ class GGNInterface(CurvatureInterface):
         H : torch.Tensor
             GGN `(parameters, parameters)`
         """
-        Js, f = self.last_layer_jacobians(x) if self.last_layer else self.jacobians(x)
+        Js, f = self.jacobians(x)
         H_lik = (
             self._get_mc_functional_fisher(f)
             if self.stochastic
@@ -410,7 +332,7 @@ class GGNInterface(CurvatureInterface):
         y: torch.Tensor,
         **kwargs: dict[str, Any],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        Js, f = self.last_layer_jacobians(x) if self.last_layer else self.jacobians(x)
+        Js, f = self.jacobians(x)
         loss = self.factor * self.lossfunc(f, y)
 
         H_lik = (
@@ -436,8 +358,6 @@ class EFInterface(CurvatureInterface):
     model : torch.nn.Module or `laplace.utils.feature_extractor.FeatureExtractor`
         torch model (neural network)
     likelihood : {'classification', 'regression'}
-    last_layer : bool, default=False
-        only consider curvature of last layer
     subnetwork_indices : torch.Tensor, default=None
         indices of the vectorized model parameters that define the subnetwork
         to apply the Laplace approximation over

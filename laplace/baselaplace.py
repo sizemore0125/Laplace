@@ -18,7 +18,6 @@ from laplace.curvature.curvature import CurvatureInterface
 from laplace.curvature.curvlinops import CurvlinopsEF, CurvlinopsGGN
 from laplace.likelihood import Likelihood as LikelihoodModule
 from laplace.utils.enums import LinkApprox, PredType, PriorStructure, TuningMethod
-from laplace.utils.matrix import Kron, KronDecomposed
 from laplace.utils.metrics import RunningNLLMetric
 from laplace.utils.utils import (
     fix_prior_prec_structure,
@@ -31,7 +30,6 @@ __all__ = [
     "BaseLaplace",
     "ParametricLaplace",
     "FullLaplace",
-    "KronLaplace",
     "DiagLaplace",
 ]
 
@@ -48,7 +46,6 @@ class BaseLaplace:
         then does prediction as in regression likelihood. The model needs to be defined accordingly:
         The forward pass during training takes `x.shape == (batch_size, 2, dim)` with
         `y.shape = (batch_size,)`. Meanwhile, during evaluation `x.shape == (batch_size, dim)`.
-        Note that 'reward_modeling' only supports `KronLaplace` and `DiagLaplace`.
     sigma_noise : torch.Tensor or float, default=1
         observation noise for the regression setting; must be 1 for classification
     prior_precision : torch.Tensor or float, default=1
@@ -1088,8 +1085,7 @@ class ParametricLaplace(BaseLaplace):
         diagonal_output : bool
             whether to use a diagonalized posterior predictive on the outputs.
             Only works for `pred_type='glm'` when `joint=False` in regression.
-            In the case of last-layer Laplace with a diagonal or Kron Hessian,
-            setting this to `True` makes computation much(!) faster for large
+            Setting this to `True` makes computation much(!) faster for large
             number of outputs.
 
         generator : torch.Generator, optional
@@ -1615,180 +1611,6 @@ class FullLaplace(ParametricLaplace):
         # (n_samples, n_params) x (n_params, n_params) -> (n_samples, n_params)
         samples = samples @ self.posterior_scale.T
         return self.mean.reshape(1, self.n_params) + samples
-
-
-class KronLaplace(ParametricLaplace):
-    """Laplace approximation with Kronecker factored log likelihood Hessian approximation
-    and hence posterior precision.
-    Mathematically, we have for each parameter group, e.g., torch.nn.Module,
-    that \\P\\approx Q \\otimes H\\.
-    See `BaseLaplace` for the full interface and see
-    `laplace.utils.matrix.Kron` and `laplace.utils.matrix.KronDecomposed` for the structure of
-    the Kronecker factors. `Kron` is used to aggregate factors by summing up and
-    `KronDecomposed` is used to add the prior, a Hessian factor (e.g. temperature),
-    and computing posterior covariances, marginal likelihood, etc.
-    Damping can be enabled by setting `damping=True`.
-    """
-
-    # key to map to correct subclass of BaseLaplace, (subset of weights, Hessian structure)
-    _key = ("all", "kron")
-
-    def __init__(
-        self,
-        model: nn.Module,
-        likelihood: LikelihoodModule,
-        sigma_noise: float | torch.Tensor = 1.0,
-        prior_precision: float | torch.Tensor = 1.0,
-        prior_mean: float | torch.Tensor = 0.0,
-        temperature: float = 1.0,
-        enable_backprop: bool = False,
-        dict_key_x: str = "input_ids",
-        dict_key_y: str = "labels",
-        backend: type[CurvatureInterface] | None = None,
-        damping: bool = False,
-        backend_kwargs: dict[str, Any] | None = None,
-    ):
-        self.damping: bool = damping
-        self.H_facs: Kron | None = None
-        super().__init__(
-            model,
-            likelihood,
-            sigma_noise,
-            prior_precision,
-            prior_mean,
-            temperature,
-            enable_backprop,
-            dict_key_x,
-            dict_key_y,
-            backend,
-            backend_kwargs,
-        )
-
-    def _init_H(self) -> None:
-        self.H: Kron | KronDecomposed | None = Kron.init_from_model(
-            self.params, self._device, self._dtype
-        )
-
-    def _check_H_init(self):
-        if getattr(self, "H_facs", None) is None:
-            raise AttributeError("Laplace not fitted. Run fit() first.")
-
-    def _curv_closure(
-        self,
-        X: torch.Tensor | MutableMapping[str, torch.Tensor | Any],
-        y: torch.Tensor,
-        N: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.backend.kron(X, y, N=N)
-
-    @staticmethod
-    def _rescale_factors(kron: Kron, factor: float) -> Kron:
-        for F in kron.kfacs:
-            if len(F) == 2:
-                F[1] *= factor
-        return kron
-
-    def fit(
-        self,
-        train_loader: DataLoader,
-        override: bool = True,
-        progress_bar: bool = False,
-    ) -> None:
-        if override:
-            self.H_facs = None
-
-        if self.H_facs is not None:
-            n_data_old: int = self.n_data
-            n_data_new: int = len(train_loader.dataset)
-            self._init_H()  # re-init H non-decomposed
-            # discount previous Kronecker factors to sum up properly together with new ones
-            self.H_facs = self._rescale_factors(
-                self.H_facs, n_data_old / (n_data_old + n_data_new)
-            )
-
-        super().fit(train_loader, override=override, progress_bar=progress_bar)
-
-        if self.H_facs is None:
-            self.H_facs = self.H
-        else:
-            # discount new factors that were computed assuming N = n_data_new
-            self.H = self._rescale_factors(
-                self.H, n_data_new / (n_data_new + n_data_old)
-            )
-            self.H_facs += self.H
-
-        # Decompose to self.H for all required quantities but keep H_facs for further inference
-        self.H = self.H_facs.decompose(damping=self.damping)
-
-    @property
-    def posterior_precision(self) -> KronDecomposed:
-        """Kronecker factored Posterior precision \\(P\\).
-
-        Returns
-        -------
-        precision : `laplace.utils.matrix.KronDecomposed`
-        """
-        self._check_H_init()
-        return self.H * self._H_factor + self.prior_precision
-
-    @property
-    def log_det_posterior_precision(self) -> torch.Tensor:
-        if type(self.H) is Kron:  # Fall back to diag prior
-            return self.prior_precision_diag.log().sum()
-        return self.posterior_precision.logdet()
-
-    def square_norm(self, value: torch.Tensor) -> torch.Tensor:
-        delta = value - self.mean
-        if type(self.H) is Kron:  # fall back to prior
-            return (delta * self.prior_precision_diag) @ delta
-        return delta @ self.posterior_precision.bmm(delta, exponent=1)
-
-    def functional_variance(self, Js: torch.Tensor) -> torch.Tensor:
-        return self.posterior_precision.inv_square_form(Js)
-
-    def functional_covariance(self, Js: torch.Tensor) -> torch.Tensor:
-        self._check_jacobians(Js)
-        n_batch, n_outs, n_params = Js.shape
-        Js = Js.reshape(n_batch * n_outs, n_params).unsqueeze(0)
-        cov = self.posterior_precision.inv_square_form(Js).squeeze(0)
-        assert cov.shape == (n_batch * n_outs, n_batch * n_outs)
-        return cov
-
-    def sample(
-        self, n_samples: int = 100, generator: torch.Generator | None = None
-    ) -> torch.Tensor:
-        samples = torch.randn(
-            n_samples,
-            self.n_params,
-            device=self._device,
-            dtype=self._dtype,
-            generator=generator,
-        )
-        samples = self.posterior_precision.bmm(samples, exponent=-0.5)
-        return self.mean.reshape(1, self.n_params) + samples.reshape(
-            n_samples, self.n_params
-        )
-
-    @BaseLaplace.prior_precision.setter
-    def prior_precision(self, prior_precision: torch.Tensor) -> None:
-        # Extend setter from Laplace to restrict prior precision structure.
-        super(KronLaplace, type(self)).prior_precision.fset(self, prior_precision)
-        if len(self.prior_precision) not in [1, self.n_layers]:
-            raise ValueError("Prior precision for Kron either scalar or per-layer.")
-
-    def state_dict(self) -> dict[str, Any]:
-        state_dict = super().state_dict()
-        assert isinstance(self.H_facs, Kron)
-        state_dict["H"] = self.H_facs.kfacs
-        return state_dict
-
-    def load_state_dict(self, state_dict: dict[str, Any]):
-        super().load_state_dict(state_dict)
-        self._init_H()
-        assert isinstance(self.H, Kron)
-        self.H_facs = self.H
-        self.H_facs.kfacs = state_dict["H"]
-        self.H = self.H_facs.decompose(damping=self.damping)
 
 
 class DiagLaplace(ParametricLaplace):

@@ -11,11 +11,9 @@ from laplace.baselaplace import (
     BaseLaplace,
     DiagLaplace,
     FullLaplace,
-    KronLaplace,
     ParametricLaplace,
 )
 from laplace.laplace import Laplace
-from laplace.lllaplace import DiagLLLaplace, FullLLLaplace, KronLLLaplace, LLLaplace
 from laplace.marglik_training import marglik_training
 from laplace.subnetlaplace import DiagSubnetLaplace, FullSubnetLaplace, SubnetLaplace
 from laplace.utils.enums import (
@@ -33,12 +31,7 @@ __all__ = [
     "BaseLaplace",
     "ParametricLaplace",  # base-class and its (first-level) subclasses
     "FullLaplace",
-    "KronLaplace",
     "DiagLaplace",
-    "LLLaplace",  # base-class last-layer
-    "FullLLLaplace",
-    "KronLLLaplace",
-    "DiagLLLaplace",
     "SubnetLaplace",  # base-class subnetwork
     "FullSubnetLaplace",
     "DiagSubnetLaplace",  # subnetwork

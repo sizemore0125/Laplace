@@ -39,7 +39,7 @@ def marglik_training(
     model: torch.nn.Module,
     train_loader: DataLoader,
     likelihood: LikelihoodModule | str = ClassificationLikelihood(),
-    hessian_structure: HessianStructure | str = HessianStructure.KRON,
+    hessian_structure: HessianStructure | str = HessianStructure.FULL,
     backend: Type[CurvatureInterface] = CurvlinopsGGN,
     optimizer_cls: Type[Optimizer] = Adam,
     optimizer_kwargs: dict | None = None,
@@ -98,7 +98,7 @@ def marglik_training(
         pytorch dataloader that implements `len(train_loader.dataset)` to obtain number of data points
     likelihood : str, default=Likelihood.CLASSIFICATION
         Likelihood.CLASSIFICATION or Likelihood.REGRESSION
-    hessian_structure : {'diag', 'kron', 'full'}, default='kron'
+    hessian_structure : {'diag', 'full'}, default='full'
         structure of the Hessian approximation
     backend : Backend, default=CurvlinopsGGN
         Curvature subclass.

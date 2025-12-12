@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 
 import laplace
 from laplace.utils.enums import Likelihood
-from laplace.utils.feature_extractor import FeatureExtractor
 from laplace.utils.swag import fit_diagonal_swag_var
 
 __all__ = [
@@ -21,7 +20,6 @@ __all__ = [
     "LargestVarianceSWAGSubnetMask",
     "ParamNameSubnetMask",
     "ModuleNameSubnetMask",
-    "LastLayerSubnetMask",
 ]
 
 
@@ -403,34 +401,3 @@ class ModuleNameSubnetMask(SubnetMask):
         subnet_mask = torch.cat(subnet_mask_list).bool()
         return subnet_mask
 
-
-class LastLayerSubnetMask(ModuleNameSubnetMask):
-    """Subnetwork mask corresponding to the last layer of the neural network.
-
-    Parameters
-    ----------
-    model : torch.nn.Module
-    last_layer_name: str, default=None
-        name of the model's last layer, if None it will be determined automatically
-    """
-
-    def __init__(self, model: nn.Module, last_layer_name: str | None = None):
-        super().__init__(model, [])
-        self._feature_extractor: FeatureExtractor = FeatureExtractor(
-            self.model, last_layer_name=last_layer_name
-        )
-        self._n_params_subnet: int | None = None
-
-    def get_subnet_mask(self, train_loader: DataLoader) -> torch.Tensor:
-        """Get the subnetwork mask identifying the last layer."""
-        if train_loader is None:
-            raise ValueError("Need to pass train loader for subnet selection.")
-
-        self._feature_extractor.eval()
-        if self._feature_extractor.last_layer is None:
-            X = next(iter(train_loader))[0]
-            with torch.no_grad():
-                self._feature_extractor.find_last_layer(X[:1].to(self._device))
-        self._module_names = [self._feature_extractor._last_layer_name]
-
-        return super().get_subnet_mask(train_loader)

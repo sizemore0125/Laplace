@@ -7,9 +7,6 @@ class SubsetOfWeights(str, Enum):
     ALL = "all"
     """All-layer, all-parameter Laplace."""
 
-    LAST_LAYER = "last_layer"
-    """Last-layer Laplace."""
-
     SUBNETWORK = "subnetwork"
     """Subnetwork Laplace."""
 
@@ -19,9 +16,6 @@ class HessianStructure(str, Enum):
 
     FULL = "full"
     """Full Hessian (generally very expensive)."""
-
-    KRON = "kron"
-    """Kronecker-factored Hessian (preferrable)."""
 
     DIAG = "diag"
     """Diagonal Hessian."""

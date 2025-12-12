@@ -21,7 +21,6 @@ nav:
       - Base Laplace: api_reference/baselaplace.md
       - Parametric Laplace: api_reference/parametriclaplace.md
       - Functional Laplace: api_reference/functionallaplace.md
-      - Last-Layer Laplace: api_reference/lllaplace.md
       - Subnet Laplace: api_reference/subnetlaplace.md
       - Curvatures: api_reference/curvatures.md
       - Marglik Training Utils: api_reference/marglik_training.md

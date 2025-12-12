@@ -3,7 +3,7 @@
 
 </div>
 
-The laplace package facilitates the application of Laplace approximations for entire neural networks, subnetworks of neural networks, or just their last layer.
+The laplace package facilitates the application of Laplace approximations for entire neural networks or subnetworks of neural networks.
 The package enables posterior approximations, marginal-likelihood estimation, and various posterior predictive computations.
 The library documentation is available at [https://aleximmer.github.io/Laplace](https://aleximmer.github.io/Laplace).
 
@@ -104,7 +104,7 @@ pred = la(x, pred_type="glm", link_approx="probit")
 
 The marginal likelihood can be used for model selection [10] and is differentiable
 for continuous hyperparameters like the prior precision or observation noise.
-Here, we fit the library default, KFAC last-layer LA and differentiate
+Here, we fit a library default LA and differentiate
 the log marginal likelihood.
 
 ```python
@@ -113,7 +113,7 @@ from laplace import Laplace
 # Un- or pre-trained model
 model = load_model()
 
-# Default to recommended last-layer KFAC LA:
+# Default to recommended LA:
 la = Laplace(model, likelihood="regression")
 la.fit(train_loader)
 
@@ -157,13 +157,13 @@ class MyGPT2(nn.Module):
 
 Then you can "select" which parameters of the LLM you want to apply the Laplace approximation
 on, by switching off the gradients of the "unneeded" parameters.
-For example, we can replicate a last-layer Laplace: (in actual practice, use `Laplace(..., subset_of_weights='last_layer', ...)` instead, though!)
+For example, we can focus on a small subset of weights by only enabling gradients on those parameters:
 
 ```python
 model = MyGPT2(tokenizer)
 model.eval()
 
-# Enable grad only for the last layer
+# Enable grad only for the classifier head
 for p in model.hf_model.parameters():
     p.requires_grad = False
 for p in model.hf_model.score.parameters():
@@ -172,7 +172,7 @@ for p in model.hf_model.score.parameters():
 la = Laplace(
     model,
     likelihood="classification",
-    # Will only hit the last-layer since it's the only one that is grad-enabled
+    # Will only hit parameters with requires_grad=True
     subset_of_weights="all",
     hessian_structure="diag",
 )
@@ -261,23 +261,20 @@ la = Laplace(model, "classification",
 la.fit(train_loader)
 ```
 
-Besides `SubnetLaplace`, you can, as already mentioned, also treat the last
-layer only using `Laplace(..., subset_of_weights='last_layer')`, which uses
-`LLLaplace`. As a third method, you may define a subnetwork by disabling
+Besides `SubnetLaplace`, you may define a subnetwork by disabling
 gradients of fixed model parameters. The different methods target different use
 cases. Each method has pros and cons, please see [this
 discussion](https://github.com/aleximmer/Laplace/issues/217#issuecomment-2278311460)
 for details. In summary
 
 - Disable-grad: General method to perform Laplace on specific types of
-  layer/parameter, e.g. in an LLM with LoRA. Can be used to emulate `LLLaplace`
-  as well. Always use `subset_of_weights='all'` for this method.
+  layer/parameter, e.g. in an LLM with LoRA. Always use `subset_of_weights='all'`
+  for this method.
   - subnet selection by disabling grads is more efficient than
     `SubnetLaplace` since it avoids calculating full Jacobians first
   - disabling grads can only be performed on `Parameter` level and not for
     individual weights, so this doesn't cover all cases that `SubnetLaplace`
     offers such as `Largest*SubnetMask` or `RandomSubnetMask`
-- `LLLaplace`: last-layer specific code with improved performance (#145)
 - `SubnetLaplace`: more fine-grained partitioning such as
   `LargestMagnitudeSubnetMask`
 
@@ -318,17 +315,6 @@ torch.save(la, "la.pt")
 torch.load("la.pt")
 ```
 
-Some Laplace variants such as `LLLaplace` might have trouble being serialized
-using the default `pickle` module, which `torch.save()` and `torch.load()` use
-(`AttributeError: Can't pickle local object ...`). In this case, the
-[`dill`](https://github.com/uqfoundation/dill) package will come in handy.
-
-```py
-import dill
-
-torch.save(la, "la.pt", pickle_module=dill)
-```
-
 With both methods, you are free to switch devices, for instance when you
 trained on a GPU but want to run predictions on CPU. In this case, use
 
@@ -349,7 +335,7 @@ torch.load(..., map_location="cpu")
     Each backend as its own caveat/behavior. The use the following to guide you
     picking the suitable backend, depending on you model & application.
 
-- **Small, simple MLP, or last-layer Laplace:** Any backend should work well.
+- **Small, simple MLP:** Any backend should work well.
   `CurvlinopsGGN` or `CurvlinopsEF` is recommended if
   `hessian_factorization = 'kron'`, but it's inefficient for other factorizations.
 - **LLMs with PEFT (e.g. LoRA):** `AsdlGGN` and `AsdlEF` are recommended.

@@ -145,7 +145,7 @@ class LaplaceBNN(Model):
             self.nn,
             self.likelihood,
             subset_of_weights="all",
-            hessian_structure="kron",
+            hessian_structure="diag",
             enable_backprop=True,
         )
         self.bnn.fit(train_loader)

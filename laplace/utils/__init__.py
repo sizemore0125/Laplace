@@ -8,13 +8,11 @@ from laplace.utils.enums import (
     TuningMethod,
 )
 from laplace.utils.feature_extractor import FeatureExtractor
-from laplace.utils.matrix import Kron, KronDecomposed
 from laplace.utils.metrics import RunningNLLMetric
 from laplace.utils.subnetmask import (
     LargestMagnitudeSubnetMask,
     LargestVarianceDiagLaplaceSubnetMask,
     LargestVarianceSWAGSubnetMask,
-    LastLayerSubnetMask,
     ModuleNameSubnetMask,
     ParamNameSubnetMask,
     RandomSubnetMask,
@@ -31,7 +29,6 @@ from laplace.utils.utils import (
     fix_prior_prec_structure,
     get_nll,
     invsqrt_precision,
-    kron,
     normal_samples,
     parameters_per_layer,
     symeig,
@@ -43,7 +40,6 @@ __all__ = [
     "validate",
     "parameters_per_layer",
     "invsqrt_precision",
-    "kron",
     "diagonal_add_scalar",
     "symeig",
     "block_diag",
@@ -54,8 +50,6 @@ __all__ = [
     "expand_prior_precision",
     "fix_prior_prec_structure",
     "FeatureExtractor",
-    "Kron",
-    "KronDecomposed",
     "fit_diagonal_swag_var",
     "SubnetMask",
     "RandomSubnetMask",
@@ -64,7 +58,6 @@ __all__ = [
     "LargestVarianceSWAGSubnetMask",
     "ParamNameSubnetMask",
     "ModuleNameSubnetMask",
-    "LastLayerSubnetMask",
     "RunningNLLMetric",
     "SubsetOfWeights",
     "HessianStructure",

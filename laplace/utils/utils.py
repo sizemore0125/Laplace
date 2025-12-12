@@ -9,7 +9,6 @@ import torch
 import torch.nn.functional as F
 import torchmetrics
 from torch import nn
-from torch.distributions.multivariate_normal import _precision_to_scale_tril
 from torch.nn import BatchNorm1d, BatchNorm2d, BatchNorm3d
 from torch.nn.utils import parameters_to_vector
 from torch.utils.data import DataLoader, Sampler
@@ -112,6 +111,16 @@ def parameters_per_layer(model: nn.Module) -> list[int]:
     params_per_layer : list[int]
     """
     return [np.prod(p.shape) for p in model.parameters()]
+
+def _precision_to_scale_tril(P, jitter=1e-6):
+    # Ref: https://nbviewer.jupyter.org/gist/fehiepsi/5ef8e09e61604f10607380467eb82006#Precision-to-scale_tril
+    n = P.shape[-1]
+    I = torch.eye(n, dtype=P.dtype, device=P.device)
+
+    Lf = torch.linalg.cholesky(torch.flip(P, (-2, -1)) + jitter * I)
+    L_inv = torch.transpose(torch.flip(Lf, (-2, -1)), -2, -1)
+    L = torch.linalg.solve_triangular(L_inv, I, upper=False)
+    return L
 
 
 def invsqrt_precision(M: torch.Tensor) -> torch.Tensor:
